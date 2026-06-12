@@ -1,0 +1,8 @@
+services:
+  api-gateway:
+    build:
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/api-gateway:/app
+    environment:
+      LOG_LEVEL: debug
