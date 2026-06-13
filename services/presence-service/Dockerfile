@@ -6,7 +6,7 @@ COPY services/presence-service/go.mod services/presence-service/go.sum ./service
 RUN cd services/presence-service && go mod download
 COPY pkgs/ ./pkgs/
 COPY services/presence-service/ ./services/presence-service/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /presence-service ./services/presence-service/cmd/server/
+RUN cd services/presence-service && CGO_ENABLED=0 GOOS=linux go build -o /presence-service ./cmd/server/
 
 FROM alpine:3.21
 RUN apk --no-cache add ca-certificates

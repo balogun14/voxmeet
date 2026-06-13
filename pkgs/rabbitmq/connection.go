@@ -24,8 +24,8 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		URL:                  "amqp://guest:guest@localhost:5672/",
-		ReconnectInterval:    30 * time.Second,
-		MaxReconnectAttempts: 10,
+		ReconnectInterval:    2 * time.Second,
+		MaxReconnectAttempts: 30,
 	}
 }
 
@@ -55,25 +55,71 @@ func (c *Connection) Connect(ctx context.Context) error {
 		return fmt.Errorf("validate config: %w", err)
 	}
 
-	conn, err := amqp.DialConfig(c.cfg.URL, amqp.Config{
-		Heartbeat: 10 * time.Second,
-	})
-	if err != nil {
-		return fmt.Errorf("dial rabbitmq: %w", err)
+	interval := c.cfg.ReconnectInterval
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	maxAttempts := c.cfg.MaxReconnectAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = 30
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("open channel: %w", err)
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		conn, err := amqp.DialConfig(c.cfg.URL, amqp.Config{
+			Heartbeat: 10 * time.Second,
+		})
+		if err != nil {
+			lastErr = fmt.Errorf("dial rabbitmq (attempt %d/%d): %w", attempt, maxAttempts, err)
+			time.Sleep(interval)
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			conn.Close()
+			lastErr = fmt.Errorf("open channel (attempt %d/%d): %w", attempt, maxAttempts, err)
+			time.Sleep(interval)
+			continue
+		}
+
+		c.mu.Lock()
+		c.conn = conn
+		c.ch = ch
+		c.mu.Unlock()
+
+		go c.handleReconnect(ctx)
+		return nil
 	}
 
-	c.mu.Lock()
-	c.conn = conn
-	c.ch = ch
-	c.mu.Unlock()
+	return fmt.Errorf("connect to rabbitmq: %w", lastErr)
+}
 
-	return nil
+func (c *Connection) handleReconnect(ctx context.Context) {
+	notify := c.conn.NotifyClose(make(chan *amqp.Error))
+	select {
+	case <-ctx.Done():
+		return
+	case err, ok := <-notify:
+		if !ok || err == nil {
+			return
+		}
+
+		c.mu.Lock()
+		c.conn = nil
+		c.ch = nil
+		c.mu.Unlock()
+
+		if connectErr := c.Connect(ctx); connectErr != nil {
+			return
+		}
+	}
 }
 
 func (c *Connection) Close() error {

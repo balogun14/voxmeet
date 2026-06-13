@@ -6,7 +6,7 @@ COPY services/api-gateway/go.mod services/api-gateway/go.sum ./services/api-gate
 RUN cd services/api-gateway && go mod download
 COPY pkgs/ ./pkgs/
 COPY services/api-gateway/ ./services/api-gateway/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /api-gateway ./services/api-gateway/cmd/server/
+RUN cd services/api-gateway && CGO_ENABLED=0 GOOS=linux go build -o /api-gateway ./cmd/server/
 
 FROM alpine:3.21
 RUN apk --no-cache add ca-certificates

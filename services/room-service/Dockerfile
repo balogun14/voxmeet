@@ -6,7 +6,7 @@ COPY services/room-service/go.mod services/room-service/go.sum ./services/room-s
 RUN cd services/room-service && go mod download
 COPY pkgs/ ./pkgs/
 COPY services/room-service/ ./services/room-service/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /room-service ./services/room-service/cmd/server/
+RUN cd services/room-service && CGO_ENABLED=0 GOOS=linux go build -o /room-service ./cmd/server/
 
 FROM alpine:3.21
 RUN apk --no-cache add ca-certificates
