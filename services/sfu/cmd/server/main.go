@@ -26,7 +26,13 @@ func main() {
 	broker := signaling.NewBroker(conn)
 	producer := signaling.NewProducer(broker)
 	manager := room.NewManager()
-	dispatcher := signaling.NewDispatcher(manager, producer)
+
+	iceServers := make([]string, 0, len(cfg.ICEServers))
+	for _, s := range cfg.ICEServers {
+		iceServers = append(iceServers, s.URLs...)
+	}
+
+	dispatcher := signaling.NewMediaDispatcher(manager, producer, iceServers)
 
 	consumer, err := signaling.NewConsumer(broker, producer)
 	if err != nil {
@@ -42,6 +48,7 @@ func main() {
 	if err := consumer.Start(ctx); err != nil {
 		log.Printf("sfu stopped: %v", err)
 	}
+	dispatcher.CloseAll()
 	manager.StopAll()
 	fmt.Println("sfu stopped")
 }

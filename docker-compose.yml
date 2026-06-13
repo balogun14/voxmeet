@@ -92,6 +92,19 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  room-service:
+    build:
+      context: ./services/room-service
+      dockerfile: Dockerfile
+    environment:
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-voxmeet}?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   rabbitmq_data:
