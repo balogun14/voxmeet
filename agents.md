@@ -41,13 +41,24 @@ Every feature follows strict TDD:
 
 ## Implementation Phases
 
-| Phase | What | Testing Focus |
-|---|---|---|
-| **1. Foundation** | Go modules, shared RabbitMQ lib, api-gateway skeleton, docker-compose, DB migrations | Connection manager, config loading, health endpoint |
-| **2. Auth + Rooms** | Registration, JWT auth, room CRUD, WebSocket hub | Auth middleware, room handlers, WS hub lifecycle |
-| **3. Calls (SFU)** | Pion WebRTC SFU, signaling flow, audio/video, screen share | PeerConnection setup, track routing, ICE handling |
-| **4. Chat** | Message persistence, broadcast, history retrieval | Message store, broadcast fan-out |
-| **5. Frontend** | React SPA (Vite + Tailwind) | Component unit tests (Vitest + testing-library) |
+| Phase | What | Testing Focus | Status |
+|---|---|---|---|
+| **1. Foundation** | Go modules, shared RabbitMQ lib, api-gateway skeleton, docker-compose, DB migrations | Connection manager, config loading, health endpoint | ✅ Done |
+| **2. Auth + Rooms** | Registration, JWT auth, room CRUD, WebSocket hub | Auth middleware, room handlers, WS hub lifecycle | ✅ Done |
+| **3. Calls (SFU)** | Pion WebRTC SFU, signaling flow, audio/video, screen share | PeerConnection setup, track routing, ICE handling | ✅ Done (signaling + room mgmt, no Pion yet) |
+| **4. Chat** | Message persistence, broadcast, history retrieval | Message store, broadcast fan-out | ✅ Done |
+| **5. Frontend** | React SPA (Vite + Tailwind) | Component unit tests (Vitest + testing-library) | 🔲 Planned |
+
+## Services
+
+| Service | Port | What it does | Status |
+|---|---|---|---|
+| **api-gateway** | 8080 | Auth (JWT), REST (users, rooms), WS signaling hub, serves SPA | ✅ Built |
+| **sfu** | internal | WebRTC SFU — room/peer/track management, RabbitMQ signaling relay | ✅ Built (signaling) |
+| **chat-service** | internal | Message persistence (PostgreSQL), broadcast (RabbitMQ), history retrieval | ✅ Built |
+| **presence-service** | internal | Online/offline tracking, heartbeat timeout, typing indicators | ✅ Built |
+| **room-service** | internal | Room lifecycle — extracted from api-gateway (planned) | 🔲 Stub |
+| **web-client** | — | React SPA | 🔲 Empty |
 
 ## DB Schema Management
 
