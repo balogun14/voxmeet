@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/awwal/voxmeet/sfu/internal/peer"
 	"github.com/awwal/voxmeet/sfu/internal/relay"
 	"github.com/awwal/voxmeet/sfu/internal/room"
+	"github.com/pion/webrtc/v4"
 )
 
 // MediaDispatcher extends the base Dispatcher with Pion WebRTC session management.
@@ -86,7 +88,10 @@ func (md *MediaDispatcher) handleJoinRoom(ctx context.Context, msg Message) erro
 
 	cfg := peer.Config{
 		ICEServers: md.iceServers,
-		OnTrack: func(kind, trackID string) {
+		OnTrack: func(remoteTrack *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+			kind := remoteTrack.Kind().String()
+			trackID := remoteTrack.ID()
+
 			r, ok := md.manager.GetRoom(msg.RoomID)
 			if !ok {
 				return
@@ -96,6 +101,7 @@ func (md *MediaDispatcher) handleJoinRoom(ctx context.Context, msg Message) erro
 				return
 			}
 			p.AddTrack(trackID, kind, "")
+
 			router := md.getOrCreateRouter(msg.RoomID)
 			router.AddPublisherTrack(msg.UserID, trackID)
 
@@ -104,6 +110,14 @@ func (md *MediaDispatcher) handleJoinRoom(ctx context.Context, msg Message) erro
 					continue
 				}
 				router.Subscribe(other.UserID, trackID)
+
+				md.mu.RLock()
+				subSession, subOk := md.sessions[other.UserID]
+				md.mu.RUnlock()
+				if subOk {
+					go md.forwardRTP(context.Background(), remoteTrack, subSession, trackID)
+				}
+
 				if md.producer != nil {
 					data, _ := json.Marshal(NewTrackData{
 						PublisherID: msg.UserID,
@@ -227,4 +241,27 @@ func (md *MediaDispatcher) handlePublish(ctx context.Context, msg Message) error
 
 func (md *MediaDispatcher) handleUnpublish(ctx context.Context, msg Message) error {
 	return md.Dispatcher.handleUnpublish(ctx, msg)
+}
+
+// forwardRTP reads RTP packets from a publisher and writes them to a subscriber.
+func (md *MediaDispatcher) forwardRTP(ctx context.Context, remote *webrtc.TrackRemote, subSession *peer.Session, trackID string) {
+	codec := remote.Codec().RTPCodecCapability
+	localTrack, err := subSession.CreateDownTrack(codec, trackID, remote.StreamID())
+	if err != nil {
+		return
+	}
+
+	buf := make([]byte, 1500)
+	for {
+		n, _, err := remote.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				return
+			}
+			return
+		}
+		if _, err := localTrack.Write(buf[:n]); err != nil {
+			return
+		}
+	}
 }

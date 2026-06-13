@@ -46,6 +46,7 @@ Every feature follows strict TDD:
 | **1. Foundation** | Go modules, shared RabbitMQ lib, api-gateway skeleton, docker-compose, DB migrations | Connection manager, config loading, health endpoint | ✅ Done |
 | **2. Auth + Rooms** | Registration, JWT auth, room CRUD, WebSocket hub | Auth middleware, room handlers, WS hub lifecycle | ✅ Done |
 | **3. Calls (SFU)** | Pion WebRTC SFU, signaling flow, audio/video, screen share | PeerConnection setup, track routing, ICE handling | ✅ Done (signaling + room mgmt, no Pion yet) |
+| **3. Calls (SFU)** | Pion WebRTC SFU, signaling flow, audio/video, screen share | PeerConnection setup, track routing, ICE handling, RTP forwarding | ✅ Done (full Pion + media relay) |
 | **4. Chat** | Message persistence, broadcast, history retrieval | Message store, broadcast fan-out | ✅ Done |
 | **5. Frontend** | React SPA (Vite + Tailwind) | Component unit tests (Vitest + testing-library) | 🔲 Planned |
 

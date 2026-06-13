@@ -27,9 +27,28 @@ type Handler struct {
 }
 
 // NewHandler creates a new room Handler.
-func NewHandler(store RoomStore) *Handler {
-	return &Handler{store: store}
+func NewHandler(q *store.Queries) *Handler {
+	return &Handler{store: &queriesStore{q: q}}
 }
+
+// NewHandlerWithStore creates a room Handler with a custom store (for testing).
+func NewHandlerWithStore(s RoomStore) *Handler {
+	return &Handler{store: s}
+}
+
+// queriesStore adapts store.Queries to RoomStore.
+type queriesStore struct {
+	q *store.Queries
+}
+
+func (s *queriesStore) CreateRoom(ctx context.Context, arg store.CreateRoomParams) (store.Room, error) { return s.q.CreateRoom(ctx, arg) }
+func (s *queriesStore) GetRoomById(ctx context.Context, id pgtype.UUID) (store.Room, error) { return s.q.GetRoomById(ctx, id) }
+func (s *queriesStore) ListRooms(ctx context.Context) ([]store.Room, error) { return s.q.ListRooms(ctx) }
+func (s *queriesStore) UpdateRoom(ctx context.Context, arg store.UpdateRoomParams) (store.Room, error) { return s.q.UpdateRoom(ctx, arg) }
+func (s *queriesStore) DeleteRoom(ctx context.Context, id pgtype.UUID) error { return s.q.DeleteRoom(ctx, id) }
+func (s *queriesStore) AddRoomMember(ctx context.Context, arg store.AddRoomMemberParams) error { return s.q.AddRoomMember(ctx, arg) }
+func (s *queriesStore) RemoveRoomMember(ctx context.Context, arg store.RemoveRoomMemberParams) error { return s.q.RemoveRoomMember(ctx, arg) }
+func (s *queriesStore) GetRoomMembers(ctx context.Context, roomID pgtype.UUID) ([]store.GetRoomMembersRow, error) { return s.q.GetRoomMembers(ctx, roomID) }
 
 func (h *Handler) CreateRoom(ctx context.Context, ownerID, name string, isPublic bool, maxParticipants int32) (*store.Room, error) {
 	uid, _ := uuid.Parse(ownerID)

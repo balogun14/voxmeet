@@ -115,3 +115,74 @@ func (h *RoomHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		"created_at":       room.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 	})
 }
+
+type updateRoomRequest struct {
+	Name            string `json:"name"`
+	IsPublic        bool   `json:"is_public"`
+	MaxParticipants int    `json:"max_participants"`
+}
+
+func (h *RoomHandler) Update(w http.ResponseWriter, r *http.Request) {
+	roomID := r.PathValue("id")
+	uid, err := uuid.Parse(roomID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid room id")
+		return
+	}
+
+	// Fetch existing to get fallback values
+	existing, err := h.queries.GetRoomById(r.Context(), pgtype.UUID{Bytes: uid, Valid: true})
+	if err != nil {
+		respondError(w, http.StatusNotFound, "room not found")
+		return
+	}
+
+	var req updateRoomRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		req.Name = existing.Name
+	}
+	if req.MaxParticipants <= 0 {
+		req.MaxParticipants = int(existing.MaxParticipants)
+	}
+
+	room, err := h.queries.UpdateRoom(r.Context(), db.UpdateRoomParams{
+		ID:              pgtype.UUID{Bytes: uid, Valid: true},
+		Name:            req.Name,
+		IsPublic:        req.IsPublic,
+		MaxParticipants: int32(req.MaxParticipants),
+	})
+	if err != nil {
+		respondError(w, http.StatusNotFound, "room not found")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"id":               userIDToString(room.ID),
+		"name":             room.Name,
+		"owner_id":         userIDToString(room.OwnerID),
+		"is_public":        room.IsPublic,
+		"max_participants": room.MaxParticipants,
+		"created_at":       room.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
+	})
+}
+
+func (h *RoomHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	roomID := r.PathValue("id")
+	uid, err := uuid.Parse(roomID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid room id")
+		return
+	}
+
+	if err := h.queries.DeleteRoom(r.Context(), pgtype.UUID{Bytes: uid, Valid: true}); err != nil {
+		respondError(w, http.StatusNotFound, "room not found")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/awwal/voxmeet/sfu/internal/peer"
+	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -74,9 +75,9 @@ func Test_Session_AddICECandidate_Invalid(t *testing.T) {
 func Test_Session_OnTrack(t *testing.T) {
 	s, err := peer.NewSession(peer.Config{
 		ICEServers: []string{"stun:stun.l.google.com:19302"},
-		OnTrack: func(kind, id string) {
-			_ = kind
-			_ = id
+		OnTrack: func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+			_ = track
+			_ = receiver
 		},
 	})
 	assert.NoError(t, err)

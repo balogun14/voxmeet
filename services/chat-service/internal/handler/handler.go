@@ -7,30 +7,54 @@ import (
 	"time"
 
 	"github.com/awwal/voxmeet/chat-service/internal/store"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// MessageStore abstracts the sqlc-generated store for testability.
-type MessageStore interface {
-	CreateMessage(ctx context.Context, arg store.CreateMessageParams) (store.Message, error)
-	GetMessagesByRoom(ctx context.Context, arg store.GetMessagesByRoomParams) ([]store.GetMessagesByRoomRow, error)
-	DeleteMessage(ctx context.Context, arg store.DeleteMessageParams) error
-}
 
 // Publisher abstracts sending messages to RabbitMQ.
 type Publisher interface {
 	Publish(ctx context.Context, exchange, routingKey string, body []byte) error
 }
 
+// Store abstracts the sqlc-generated store for testability.
+type Store interface {
+	CreateMessage(ctx context.Context, arg store.CreateMessageParams) (store.Message, error)
+	GetMessagesByRoom(ctx context.Context, arg store.GetMessagesByRoomParams) ([]store.GetMessagesByRoomRow, error)
+	DeleteMessage(ctx context.Context, arg store.DeleteMessageParams) error
+}
+
+type queriesStore struct {
+	q *store.Queries
+}
+
+func (s *queriesStore) CreateMessage(ctx context.Context, arg store.CreateMessageParams) (store.Message, error) {
+	return s.q.CreateMessage(ctx, arg)
+}
+func (s *queriesStore) GetMessagesByRoom(ctx context.Context, arg store.GetMessagesByRoomParams) ([]store.GetMessagesByRoomRow, error) {
+	return s.q.GetMessagesByRoom(ctx, arg)
+}
+func (s *queriesStore) DeleteMessage(ctx context.Context, arg store.DeleteMessageParams) error {
+	return s.q.DeleteMessage(ctx, arg)
+}
+
 // Handler processes chat messages.
 type Handler struct {
-	store MessageStore
+	store Store
 	pub   Publisher
 }
 
 // NewHandler creates a new chat Handler.
-func NewHandler(store MessageStore, pub Publisher) *Handler {
-	return &Handler{store: store, pub: pub}
+func NewHandler(pool *pgxpool.Pool, pub Publisher) *Handler {
+	return &Handler{
+		store: &queriesStore{q: store.New(pool)},
+		pub:   pub,
+	}
+}
+
+// NewHandlerWithStore creates a chat Handler with a specific store (for testing).
+func NewHandlerWithStore(s Store, pub Publisher) *Handler {
+	return &Handler{store: s, pub: pub}
 }
 
 // MessageEvent is the payload from RabbitMQ.
@@ -40,25 +64,18 @@ type MessageEvent struct {
 	Content string `json:"content"`
 }
 
-// ChatMessage is the broadcast payload.
-type ChatMessage struct {
-	ID        string `json:"id"`
-	RoomID    string `json:"room_id"`
-	UserID    string `json:"user_id"`
-	Content   string `json:"content"`
-	Type      string `json:"type"`
-	CreatedAt string `json:"created_at"`
-}
-
 // HandleMessage persists a message and broadcasts it to the room.
 func (h *Handler) HandleMessage(ctx context.Context, evt MessageEvent) error {
 	if evt.Content == "" {
 		return fmt.Errorf("content is required")
 	}
 
+	roomUUID, _ := uuid.Parse(evt.RoomID)
+	userUUID, _ := uuid.Parse(evt.UserID)
+
 	msg, err := h.store.CreateMessage(ctx, store.CreateMessageParams{
-		RoomID:  pgtype.UUID{}, // populated from string in real consumer
-		UserID:  pgtype.UUID{},
+		RoomID:  pgtype.UUID{Bytes: roomUUID, Valid: true},
+		UserID:  pgtype.UUID{Bytes: userUUID, Valid: true},
 		Content: evt.Content,
 		Type:    "text",
 	})
@@ -80,8 +97,10 @@ func (h *Handler) HandleMessage(ctx context.Context, evt MessageEvent) error {
 
 // GetHistory retrieves message history for a room.
 func (h *Handler) GetHistory(ctx context.Context, roomID string, limit, offset int32) ([]ChatMessage, error) {
+	roomUUID, _ := uuid.Parse(roomID)
+
 	rows, err := h.store.GetMessagesByRoom(ctx, store.GetMessagesByRoomParams{
-		RoomID: pgtype.UUID{},
+		RoomID: pgtype.UUID{Bytes: roomUUID, Valid: true},
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -105,8 +124,20 @@ func (h *Handler) GetHistory(ctx context.Context, roomID string, limit, offset i
 
 // DeleteMessage deletes a message.
 func (h *Handler) DeleteMessage(ctx context.Context, roomID, messageID string) error {
+	roomUUID, _ := uuid.Parse(roomID)
+	msgUUID, _ := uuid.Parse(messageID)
 	return h.store.DeleteMessage(ctx, store.DeleteMessageParams{
-		ID:     pgtype.UUID{},
-		RoomID: pgtype.UUID{},
+		ID:     pgtype.UUID{Bytes: msgUUID, Valid: true},
+		RoomID: pgtype.UUID{Bytes: roomUUID, Valid: true},
 	})
+}
+
+// ChatMessage is the API response type.
+type ChatMessage struct {
+	ID        string `json:"id"`
+	RoomID    string `json:"room_id"`
+	UserID    string `json:"user_id"`
+	Content   string `json:"content"`
+	Type      string `json:"type"`
+	CreatedAt string `json:"created_at"`
 }

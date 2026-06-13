@@ -10,7 +10,7 @@ import (
 // Config holds Pion configuration for a peer session.
 type Config struct {
 	ICEServers    []string
-	OnTrack       func(kind, trackID string)
+	OnTrack       func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver)
 	OnICE         func(candidate string, sdpMid string, sdpMLineIndex uint16)
 	OnStateChange func(state string)
 }
@@ -58,7 +58,7 @@ func NewSession(cfg Config) (*Session, error) {
 
 	if cfg.OnTrack != nil {
 		pc.OnTrack(func(remote *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-			cfg.OnTrack(remote.Kind().String(), remote.ID())
+			cfg.OnTrack(remote, receiver)
 		})
 	}
 

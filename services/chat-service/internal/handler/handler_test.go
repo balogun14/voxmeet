@@ -59,7 +59,7 @@ func Test_HandleMessage_CreatesAndBroadcasts(t *testing.T) {
 		},
 	}
 
-	h := handler.NewHandler(st, pub)
+	h := handler.NewHandlerWithStore(st, pub)
 	err := h.HandleMessage(context.Background(), handler.MessageEvent{
 		RoomID:  "room-1",
 		UserID:  "user-1",
@@ -70,7 +70,7 @@ func Test_HandleMessage_CreatesAndBroadcasts(t *testing.T) {
 }
 
 func Test_HandleMessage_EmptyContent(t *testing.T) {
-	h := handler.NewHandler(&mockStore{}, &mockPublisher{})
+	h := handler.NewHandlerWithStore(&mockStore{}, &mockPublisher{})
 	err := h.HandleMessage(context.Background(), handler.MessageEvent{
 		RoomID:  "room-1",
 		UserID:  "user-1",
@@ -89,7 +89,7 @@ func Test_GetHistory_ReturnsMessages(t *testing.T) {
 		},
 	}
 
-	h := handler.NewHandler(st, &mockPublisher{})
+	h := handler.NewHandlerWithStore(st, &mockPublisher{})
 	msgs, err := h.GetHistory(context.Background(), "room-1", 50, 0)
 	require.NoError(t, err)
 	assert.Len(t, msgs, 2)
@@ -103,7 +103,7 @@ func Test_GetHistory_StoreError(t *testing.T) {
 		},
 	}
 
-	h := handler.NewHandler(st, &mockPublisher{})
+	h := handler.NewHandlerWithStore(st, &mockPublisher{})
 	_, err := h.GetHistory(context.Background(), "room-1", 50, 0)
 	assert.Error(t, err)
 }
@@ -117,7 +117,7 @@ func Test_DeleteMessage(t *testing.T) {
 		},
 	}
 
-	h := handler.NewHandler(st, &mockPublisher{})
+	h := handler.NewHandlerWithStore(st, &mockPublisher{})
 	err := h.DeleteMessage(context.Background(), "room-1", "msg-1")
 	require.NoError(t, err)
 	assert.True(t, deleted)

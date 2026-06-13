@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	ossignal "os/signal"
 	"syscall"
 
@@ -13,6 +14,14 @@ import (
 	"github.com/awwal/voxmeet/pkgs/rabbitmq"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type rpcPublisher struct {
+	conn *rabbitmq.Connection
+}
+
+func (p *rpcPublisher) Publish(ctx context.Context, exchange, routingKey string, body []byte) error {
+	return p.conn.Publish(ctx, exchange, routingKey, body)
+}
 
 func main() {
 	cfg := config.FromEnv()
@@ -33,9 +42,6 @@ func main() {
 	defer rmq.Close()
 
 	rmq.DeclareExchange(rabbitmq.ExchangeName("chat"), "topic")
-	rmq.DeclareExchange(rabbitmq.ExchangeName("rpc"), "direct")
-
-	// Declare and bind queue for chat messages
 	q, _ := rmq.DeclareQueue("voxmeet.chat-service.messages")
 	rmq.BindQueue(q, rabbitmq.ExchangeName("chat"), "chat.room.*")
 
@@ -44,12 +50,19 @@ func main() {
 		log.Fatalf("consume messages: %v", err)
 	}
 
-	h := handler.NewHandler(nil, nil) // TODO: wire real store and publisher
+	h := handler.NewHandler(pool, &rpcPublisher{conn: rmq})
 
-	ctx, stop := ossignal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+	sigCh := make(chan os.Signal, 1)
+	ossignal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
 	fmt.Println("chat-service starting...")
+
+	go func() {
+		<-sigCh
+		fmt.Println("\nshutting down...")
+		rmq.Close()
+		pool.Close()
+	}()
 
 	for d := range msgs {
 		var evt struct {
@@ -61,14 +74,13 @@ func main() {
 		if err := json.Unmarshal(d.Body, &evt); err != nil {
 			continue
 		}
-
 		switch evt.Action {
 		case "chat.send":
-			h.HandleMessage(ctx, handler.MessageEvent{
-				RoomID:  evt.RoomID,
-				UserID:  evt.UserID,
-				Content: evt.Content,
-			})
+			if err := h.HandleMessage(context.Background(), handler.MessageEvent{
+				RoomID: evt.RoomID, UserID: evt.UserID, Content: evt.Content,
+			}); err != nil {
+				log.Printf("handle message: %v", err)
+			}
 		}
 	}
 

@@ -14,7 +14,10 @@ import (
 	"github.com/awwal/voxmeet/api-gateway/internal/auth"
 	"github.com/awwal/voxmeet/api-gateway/internal/config"
 	"github.com/awwal/voxmeet/api-gateway/internal/db"
+	"github.com/awwal/voxmeet/api-gateway/internal/docs"
 	"github.com/awwal/voxmeet/api-gateway/internal/handler"
+	"github.com/awwal/voxmeet/api-gateway/internal/middleware"
+	"github.com/awwal/voxmeet/api-gateway/internal/migrate"
 	"github.com/awwal/voxmeet/api-gateway/internal/ws"
 	"github.com/awwal/voxmeet/pkgs/rabbitmq"
 )
@@ -32,6 +35,11 @@ func main() {
 	defer pool.Close()
 
 	queries := db.New(pool)
+
+	// Run migrations
+	if err := migrate.Run(context.Background(), pool); err != nil {
+		log.Printf("migration warning: %v", err)
+	}
 
 	// Connect to RabbitMQ
 	rmq := rabbitmq.New(rabbitmq.Config{URL: cfg.RabbitMQURL})
@@ -73,19 +81,26 @@ func main() {
 	mux.HandleFunc("POST /api/v1/auth/register", authH.Register)
 	mux.HandleFunc("POST /api/v1/auth/login", authH.Login)
 
+	// API docs
+	docsMux := docs.Handler()
+	mux.Handle("GET /api/v1/docs", docsMux)
+	mux.Handle("GET /api/v1/docs/", docsMux)
+
 	// WebSocket
 	mux.Handle("GET /api/v1/ws", ws.Handler(hub, cfg.JWTSecret))
 
 	// Protected routes
 	roomH := handler.NewRoomHandler(queries)
 	mux.Handle("GET /api/v1/rooms/{id}", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(roomH.GetByID)))
+	mux.Handle("PUT /api/v1/rooms/{id}", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(roomH.Update)))
+	mux.Handle("DELETE /api/v1/rooms/{id}", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(roomH.Delete)))
 	mux.Handle("GET /api/v1/rooms", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(roomH.List)))
 	mux.Handle("POST /api/v1/rooms", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(roomH.Create)))
 	mux.Handle("GET /api/v1/me", auth.Middleware(cfg.JWTSecret, http.HandlerFunc(handler.CurrentUser(queries))))
 
 	srv := &http.Server{
 		Addr:         cfg.HTTPPort,
-		Handler:      mux,
+		Handler:      middleware.CORS(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,

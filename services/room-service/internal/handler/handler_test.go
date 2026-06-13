@@ -37,7 +37,7 @@ func (m *mockStore) ListRoomsByUser(ctx context.Context, userID pgtype.UUID) ([]
 func (m *mockStore) IsRoomMember(ctx context.Context, arg store.IsRoomMemberParams) (bool, error) { return false, nil }
 
 func Test_Handler_CreateRoom(t *testing.T) {
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		createFn: func(ctx context.Context, arg store.CreateRoomParams) (store.Room, error) {
 			return store.Room{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, Name: arg.Name, OwnerID: arg.OwnerID, CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
 		},
@@ -49,7 +49,7 @@ func Test_Handler_CreateRoom(t *testing.T) {
 
 func Test_Handler_GetRoom(t *testing.T) {
 	roomID := uuid.New()
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		getFn: func(ctx context.Context, id pgtype.UUID) (store.Room, error) {
 			return store.Room{ID: id, Name: "Found Room"}, nil
 		},
@@ -60,7 +60,7 @@ func Test_Handler_GetRoom(t *testing.T) {
 }
 
 func Test_Handler_GetRoom_NotFound(t *testing.T) {
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		getFn: func(ctx context.Context, id pgtype.UUID) (store.Room, error) {
 			return store.Room{}, errors.New("not found")
 		},
@@ -70,7 +70,7 @@ func Test_Handler_GetRoom_NotFound(t *testing.T) {
 }
 
 func Test_Handler_ListRooms(t *testing.T) {
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		listFn: func(ctx context.Context) ([]store.Room, error) {
 			return []store.Room{{Name: "Room A"}, {Name: "Room B"}}, nil
 		},
@@ -82,7 +82,7 @@ func Test_Handler_ListRooms(t *testing.T) {
 
 func Test_Handler_DeleteRoom(t *testing.T) {
 	var deleted bool
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		deleteFn: func(ctx context.Context, id pgtype.UUID) error { deleted = true; return nil },
 	})
 	err := h.DeleteRoom(context.Background(), uuid.New().String())
@@ -92,7 +92,7 @@ func Test_Handler_DeleteRoom(t *testing.T) {
 
 func Test_Handler_AddMember(t *testing.T) {
 	var added bool
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		addMemberFn: func(ctx context.Context, arg store.AddRoomMemberParams) error { added = true; return nil },
 	})
 	err := h.AddMember(context.Background(), uuid.New().String(), uuid.New().String(), "member")
@@ -102,7 +102,7 @@ func Test_Handler_AddMember(t *testing.T) {
 
 func Test_Handler_RemoveMember(t *testing.T) {
 	var removed bool
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		removeMemberFn: func(ctx context.Context, arg store.RemoveRoomMemberParams) error { removed = true; return nil },
 	})
 	err := h.RemoveMember(context.Background(), uuid.New().String(), uuid.New().String())
@@ -111,7 +111,7 @@ func Test_Handler_RemoveMember(t *testing.T) {
 }
 
 func Test_Handler_GetMembers(t *testing.T) {
-	h := handler.NewHandler(&mockStore{
+	h := handler.NewHandlerWithStore(&mockStore{
 		getMembersFn: func(ctx context.Context, roomID pgtype.UUID) ([]store.GetRoomMembersRow, error) {
 			return []store.GetRoomMembersRow{{Username: "alice"}, {Username: "bob"}}, nil
 		},
